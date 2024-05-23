@@ -235,11 +235,67 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
 
+  create-container:
+    needs:
+      - host
+    env:
+      REGISTRY: quay.io/ibotty
+      IMAGE_NAME: file-scraper
+      ARCHS: amd64
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Log into registry
+      uses: redhat-actions/podman-login@v1
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+    - name: Set up qemu for multi-arch
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static
+      if: ${{ env.ARCHS != 'amd64' }}
+
+    - name: "Download GitHub Artifacts"
+      uses: actions/download-artifact@v4
+      with:
+        pattern: artifacts-*
+        path: artifacts
+        merge-multiple: true
+
+    - name: extract binary
+      run: |
+        tar xJf artifacts/file-scraper-x86_64-unknown-linux-gnu.tar.xz
+        mv file-scraper-x86_64-unknown-linux-gnu/file-scraper .
+
+    - name: Build container
+      id: build-image
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ env.IMAGE_NAME }}
+        tags: "${{ github.ref_name }} latest"
+        archs: ${{ env.ARCHS }}
+        build-args: BINARY=file-scraper
+        oci: true
+        containerfiles: ./Containerfile
+
+    - name: push to registry
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-image.outputs.image }}
+        tags: ${{ steps.build-image.outputs.tags }}
+        registry: ${{ env.REGISTRY }}
+
   # Create a GitHub Release while uploading all files to it
   announce:
     needs:
       - plan
       - host
+      - create-container
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
@@ -269,3 +325,4 @@ jobs:
           body: ${{ fromJson(needs.host.outputs.val).announcement_github_body }}
           prerelease: ${{ fromJson(needs.host.outputs.val).announcement_is_prerelease }}
           artifacts: "artifacts/*"
+
