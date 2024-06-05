@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO external_file(external_source, path) SELECT $1, * from UNNEST($2::text[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f7ef491200ea1f1e568d6ce29cc43a3ebeb3f2ee92f3f98ff70a0d671fe2c6a"
+}
