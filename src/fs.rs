@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use async_walkdir::{DirEntry, WalkDir};
+use gethostname::gethostname;
 use itertools::Itertools;
 use tokio::pin;
 use tokio_stream::StreamExt;
@@ -14,18 +15,33 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Worker {
+    pub identifier: String,
     pub path: String,
     pub db: DB,
 }
 
 impl Worker {
     #[instrument(skip_all)]
-    pub fn from_path(path: &str, db: DB) -> Result<Self> {
+    pub fn from_path(identifier: Option<&str>, path: &str, db: DB) -> Result<Self> {
+        let identifier = identifier
+            .map(str::to_string)
+            .unwrap_or_else(|| Self::default_identifier(path));
         let path = path.to_string();
-        let worker = Worker { path, db };
+        let worker = Worker {
+            identifier,
+            path,
+            db,
+        };
         debug!(?worker, "created worker from path");
 
         Ok(worker)
+    }
+
+    #[instrument(skip_all)]
+    pub fn default_identifier(path: &str) -> String {
+        let hostname = gethostname();
+        let hostname = hostname.to_str().unwrap();
+        format!("{}:{}", hostname, path)
     }
 
     #[instrument(skip_all)]
@@ -38,7 +54,11 @@ impl Worker {
             })
             .collect();
 
-        if let Err(e) = self.db.record_files(&self.path, files.as_slice()).await {
+        if let Err(e) = self
+            .db
+            .record_files(&self.identifier, files.as_slice())
+            .await
+        {
             error!(?e)
         }
     }

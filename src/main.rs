@@ -20,6 +20,9 @@ use worker::Worker;
 pub struct Args {
     paths: Vec<String>,
 
+    #[arg(short, long)]
+    identifier: Option<String>,
+
     #[command(flatten)]
     verbose: Verbosity<ErrorLevel>,
 }
@@ -41,10 +44,11 @@ async fn main() -> Result<()> {
     let mut joinset = JoinSet::new();
     for path in &args.paths {
         let path = path.clone();
+        let identifier = args.identifier.clone();
         let db = DB::new(&env::var("DATABASE_URL")?).await?;
 
         joinset.spawn(async move {
-            if let Err(error) = process(&path, db).await {
+            if let Err(error) = process(identifier.as_deref(), &path, db).await {
                 error!(?path, ?error, "Error processing path")
             };
         });
@@ -58,10 +62,12 @@ async fn main() -> Result<()> {
 }
 
 #[instrument(skip(db))]
-async fn process(path: &str, db: DB) -> Result<()> {
-    let worker: Box<dyn Worker> = s3::Worker::from_path(path)
+async fn process(identifier: Option<&str>, path: &str, db: DB) -> Result<()> {
+    let worker: Box<dyn Worker> = s3::Worker::from_path(identifier, path)
         .map(|w| Box::new(w) as Box<dyn Worker>)
-        .or_else(|_| fs::Worker::from_path(path, db).map(|w| Box::new(w) as Box<dyn Worker>))?;
+        .or_else(|_| {
+            fs::Worker::from_path(identifier, path, db).map(|w| Box::new(w) as Box<dyn Worker>)
+        })?;
     worker.walk().await?;
     Ok(())
 }

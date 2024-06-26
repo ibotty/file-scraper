@@ -6,12 +6,13 @@ use crate::worker;
 
 #[derive(Debug)]
 pub struct Worker {
+    pub identifier: String,
     pub s3_bucket: String,
     pub path: String,
 }
 
 impl Worker {
-    pub fn from_path(s: &str) -> Result<Self> {
+    pub fn from_path(identifier: Option<&str>, s: &str) -> Result<Self> {
         let re = Regex::new(r"^s3://(?<bucket>[[:alnum:]]+)(|/(?<path>.*))$")
             .context("Cannot create regex")?;
         let captures = re.captures(s).context("s3: Cannot parse s3 URL")?;
@@ -21,8 +22,13 @@ impl Worker {
             .map(|c| c.as_str())
             .unwrap_or("")
             .to_string();
+        let identifier = identifier.unwrap_or(s).to_string();
 
-        let worker = Worker { s3_bucket, path };
+        let worker = Worker {
+            identifier,
+            s3_bucket,
+            path,
+        };
         debug!(?worker, "created worker from path");
 
         Ok(worker)
