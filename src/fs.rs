@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_walkdir::{DirEntry, WalkDir};
 use gethostname::gethostname;
 use itertools::Itertools;
+use sqlx::{Postgres, Transaction};
 use tokio::pin;
 use tokio_stream::StreamExt;
 use tracing::{debug, error, instrument};
@@ -45,7 +46,11 @@ impl Worker {
     }
 
     #[instrument(skip_all)]
-    async fn handle_entries(&self, entries: Vec<DirEntry>) -> () {
+    async fn handle_entries(
+        &self,
+        mut tx: &mut Transaction<'static, Postgres>,
+        entries: Vec<DirEntry>,
+    ) -> () {
         debug!(?entries);
         let files: Vec<_> = entries
             .iter()
@@ -54,11 +59,7 @@ impl Worker {
             })
             .collect();
 
-        if let Err(e) = self
-            .db
-            .record_files(&self.identifier, files.as_slice())
-            .await
-        {
+        if let Err(e) = DB::record_files(&mut tx, &self.identifier, files.as_slice()).await {
             error!(?e)
         }
     }
@@ -72,6 +73,10 @@ impl worker::Worker for Worker {
         let batch_entries = entries.chunks_timeout(200, Duration::from_secs(1));
         pin!(batch_entries);
 
+        let mut tx = self.db.begin().await?;
+
+        DB::clean_table(&mut tx, &self.identifier).await?;
+
         while let Some(batch) = batch_entries.next().await {
             let (files, errors): (Vec<_>, Vec<_>) = batch.into_iter().partition_result();
             let filtered = tokio_stream::iter(files.into_iter())
@@ -79,11 +84,14 @@ impl worker::Worker for Worker {
                 .filter_map(|x| x)
                 .collect()
                 .await;
-            self.handle_entries(filtered).await;
+            self.handle_entries(&mut tx, filtered).await;
             for e in errors {
                 error!(?e);
             }
         }
+
+        tx.commit().await?;
+
         Ok(())
     }
 }

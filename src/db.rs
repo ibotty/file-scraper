@@ -1,5 +1,8 @@
 use anyhow::Result;
-use sqlx::postgres::{PgPool as Pool, PgPoolOptions};
+use sqlx::{
+    postgres::{PgPool as Pool, PgPoolOptions},
+    Postgres, Transaction,
+};
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct FileInfo {
@@ -19,7 +22,16 @@ impl DB {
             .await?;
         Ok(Self { pool })
     }
-    pub async fn record_files(&self, external_source: &str, files: &[FileInfo]) -> Result<()> {
+
+    pub async fn begin(&self) -> Result<Transaction<'static, Postgres>> {
+        Ok(self.pool.begin().await?)
+    }
+
+    pub async fn record_files(
+        tx: &mut Transaction<'static, Postgres>,
+        external_source: &str,
+        files: &[FileInfo],
+    ) -> Result<()> {
         let filenames: Vec<_> = files
             .iter()
             .map(|f| f.name.as_str())
@@ -31,7 +43,20 @@ impl DB {
             external_source,
             &filenames
         )
-        .execute(&self.pool)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn clean_table(
+        tx: &mut Transaction<'static, Postgres>,
+        external_source: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"DELETE FROM external_file WHERE external_source = $1"#,
+            external_source
+        )
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
