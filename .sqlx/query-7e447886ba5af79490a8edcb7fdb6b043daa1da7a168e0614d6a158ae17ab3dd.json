@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO external_file(external_source, filename, path, mime_type, created, modified, size)\n                SELECT $1, * from UNNEST(\n                    $2::text[],\n                    $3::text[],\n                    $4::text[],\n                    $5::timestamptz[],\n                    $6::timestamptz[],\n                    $7::bigint[]\n                )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "TimestamptzArray",
+        "TimestamptzArray",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7e447886ba5af79490a8edcb7fdb6b043daa1da7a168e0614d6a158ae17ab3dd"
+}
