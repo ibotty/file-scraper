@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use async_walkdir::{DirEntry, WalkDir};
+use futures_util::future::join_all;
 use gethostname::gethostname;
 use itertools::Itertools;
 use sqlx::{Postgres, Transaction};
@@ -45,23 +46,49 @@ impl Worker {
         format!("{}:{}", hostname, path)
     }
 
+    #[instrument]
+    async fn get_fileinfo(entry: &DirEntry) -> Result<FileInfo> {
+        let path = entry.path().parent().unwrap().to_string_lossy().to_string();
+        let filename = entry.file_name().to_string_lossy().to_string();
+        let mime_type = match entry.file_type().await.map(|ft| ft.is_file()) {
+            Ok(true) => mime_guess::from_path(entry.path())
+                .first()
+                .map(|m| m.essence_str().to_string()),
+            Ok(false) => Some("inode/directory".to_string()),
+            Err(e) => {
+                error!(?e);
+                None
+            }
+        };
+        let metadata = entry.metadata().await?;
+
+        let size = metadata.len();
+        let created = metadata.created()?;
+        let modified = metadata.modified()?;
+
+        Ok(FileInfo {
+            path,
+            filename,
+            mime_type,
+            created,
+            modified,
+            size,
+        })
+    }
+
     #[instrument(skip_all)]
     async fn handle_entries(
         &self,
-        mut tx: &mut Transaction<'static, Postgres>,
+        tx: &mut Transaction<'static, Postgres>,
         entries: Vec<DirEntry>,
-    ) -> () {
+    ) -> Result<()> {
         debug!(?entries);
-        let files: Vec<_> = entries
-            .iter()
-            .map(|entry| FileInfo {
-                name: entry.path().to_string_lossy().to_string(),
-            })
-            .collect();
+        let files = join_all(entries.iter().map(Self::get_fileinfo))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
 
-        if let Err(e) = DB::record_files(&mut tx, &self.identifier, files.as_slice()).await {
-            error!(?e)
-        }
+        DB::record_files(tx, &self.identifier, files).await
     }
 }
 
@@ -79,12 +106,11 @@ impl worker::Worker for Worker {
 
         while let Some(batch) = batch_entries.next().await {
             let (files, errors): (Vec<_>, Vec<_>) = batch.into_iter().partition_result();
-            let filtered = tokio_stream::iter(files.into_iter())
-                .then(filter_file)
-                .filter_map(|x| x)
-                .collect()
-                .await;
-            self.handle_entries(&mut tx, filtered).await;
+
+            if let Err(e) = self.handle_entries(&mut tx, files).await {
+                error!(?e);
+            };
+
             for e in errors {
                 error!(?e);
             }
@@ -93,18 +119,5 @@ impl worker::Worker for Worker {
         tx.commit().await?;
 
         Ok(())
-    }
-}
-
-async fn filter_file(entry: DirEntry) -> Option<DirEntry> {
-    if entry
-        .file_type()
-        .await
-        .map(|t| t.is_file())
-        .unwrap_or(false)
-    {
-        Some(entry)
-    } else {
-        None
     }
 }
