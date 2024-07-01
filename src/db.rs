@@ -3,7 +3,6 @@ use std::time::SystemTime;
 use anyhow::Result;
 use sqlx::{
     postgres::{PgPool as Pool, PgPoolOptions},
-    types::time::OffsetDateTime,
     Postgres, Transaction,
 };
 
