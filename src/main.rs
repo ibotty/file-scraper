@@ -10,7 +10,7 @@ use clap::Parser;
 use clap_verbosity::{ErrorLevel, Verbosity};
 use db::DB;
 use tokio::task::JoinSet;
-use tracing::{debug, error, instrument, level_filters::LevelFilter, Level};
+use tracing::{debug, error, instrument, level_filters::LevelFilter, warn, Level};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use worker::Worker;
@@ -63,10 +63,12 @@ async fn main() -> Result<()> {
 
 #[instrument(skip(db))]
 async fn process(identifier: Option<&str>, path: &str, db: DB) -> Result<()> {
-    let worker: Box<dyn Worker> = s3::Worker::from_path(identifier, path)
+    let worker: Box<dyn Worker> = s3::Worker::from_path(db.clone(), identifier, path)
+        .await
+        .inspect_err(|e| warn!(?e, "cannot construct s3 worker"))
         .map(|w| Box::new(w) as Box<dyn Worker>)
         .or_else(|_| {
-            fs::Worker::from_path(identifier, path, db).map(|w| Box::new(w) as Box<dyn Worker>)
+            fs::Worker::from_path(db, identifier, path).map(|w| Box::new(w) as Box<dyn Worker>)
         })?;
     worker.walk().await?;
     Ok(())

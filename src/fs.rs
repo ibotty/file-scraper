@@ -24,7 +24,7 @@ pub struct Worker {
 
 impl Worker {
     #[instrument(skip_all)]
-    pub fn from_path(identifier: Option<&str>, path: &str, db: DB) -> Result<Self> {
+    pub fn from_path(db: DB, identifier: Option<&str>, path: &str) -> Result<Self> {
         let identifier = identifier
             .map(str::to_string)
             .unwrap_or_else(|| Self::default_identifier(path));
@@ -63,7 +63,7 @@ impl Worker {
         let metadata = entry.metadata().await?;
 
         let size = metadata.len();
-        let created = metadata.created()?;
+        let created = Some(metadata.created()?);
         let modified = metadata.modified()?;
 
         Ok(FileInfo {

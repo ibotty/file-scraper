@@ -8,7 +8,9 @@ repository = "https://github.com/ibotty/file-scraper"
 anyhow = "1.0.86"
 async-trait = "0.1.80"
 async-walkdir = "2.0.0"
+aws-config = { version = "1.5.4", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.31.0"
+aws-smithy-types = "1.2.0"
 clap = { version = "4.5.4", features = ["derive"] }
 clap-verbosity = "2.1.0"
 futures-util = "0.3.30"

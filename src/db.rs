@@ -3,6 +3,7 @@ use std::time::SystemTime;
 use anyhow::Result;
 use sqlx::{
     postgres::{PgPool as Pool, PgPoolOptions},
+    types::time::OffsetDateTime,
     Postgres, Transaction,
 };
 
@@ -11,12 +12,12 @@ pub struct FileInfo {
     pub path: String,
     pub filename: String,
     pub mime_type: Option<String>,
-    pub created: SystemTime,
+    pub created: Option<SystemTime>,
     pub modified: SystemTime,
     pub size: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DB {
     pool: Pool,
 }
@@ -50,7 +51,7 @@ impl DB {
             filenames.push(file.filename);
             pathes.push(file.path);
             mime_types.push(file.mime_type);
-            createds.push(file.created.into());
+            createds.push(file.created.map(|f| f.into()));
             modifieds.push(file.modified.into());
             sizes.push(file.size.try_into().ok());
         });
@@ -69,7 +70,7 @@ impl DB {
             &filenames,
             &pathes,
             &mime_types as &Vec<Option<String>>,
-            &createds,
+            &createds as &Vec<Option<OffsetDateTime>>,
             &modifieds,
             &sizes as &Vec<Option<i64>>,
         )
