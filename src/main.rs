@@ -10,7 +10,7 @@ use clap::Parser;
 use clap_verbosity::{ErrorLevel, Verbosity};
 use db::DB;
 use tokio::task::JoinSet;
-use tracing::{debug, error, instrument, level_filters::LevelFilter, warn, Level};
+use tracing::{debug, error, info, instrument, level_filters::LevelFilter, Level};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use worker::Worker;
@@ -48,14 +48,21 @@ async fn main() -> Result<()> {
         let db = DB::new(&env::var("DATABASE_URL")?).await?;
 
         joinset.spawn(async move {
-            if let Err(error) = process(identifier.as_deref(), &path, db).await {
-                error!(?path, ?error, "Error processing path")
-            };
+            process(identifier.as_deref(), &path, db)
+                .await
+                .inspect_err(|error| {
+                    // if let Err(error) = process(identifier.as_deref(), &path, db).await {
+                    error!(?path, ?error, "Error processing path")
+                })
         });
     }
 
     // wait for all tasks to complete
-    while let Some(_res) = joinset.join_next().await {}
+    joinset
+        .join_all()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
 
     debug!(?args, ?log_level);
     Ok(())
@@ -65,11 +72,10 @@ async fn main() -> Result<()> {
 async fn process(identifier: Option<&str>, path: &str, db: DB) -> Result<()> {
     let worker: Box<dyn Worker> = s3::Worker::from_path(db.clone(), identifier, path)
         .await
-        .inspect_err(|e| warn!(?e, "cannot construct s3 worker"))
+        .inspect_err(|e| info!(?e, "cannot construct s3 worker"))
         .map(|w| Box::new(w) as Box<dyn Worker>)
         .or_else(|_| {
             fs::Worker::from_path(db, identifier, path).map(|w| Box::new(w) as Box<dyn Worker>)
         })?;
-    worker.walk().await?;
-    Ok(())
+    worker.walk().await
 }

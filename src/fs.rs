@@ -105,15 +105,8 @@ impl worker::Worker for Worker {
         DB::clean_table(&mut tx, &self.identifier).await?;
 
         while let Some(batch) = batch_entries.next().await {
-            let (files, errors): (Vec<_>, Vec<_>) = batch.into_iter().partition_result();
-
-            if let Err(e) = self.handle_entries(&mut tx, files).await {
-                error!(?e);
-            };
-
-            for e in errors {
-                error!(?e);
-            }
+            let files: Vec<_> = batch.into_iter().try_collect()?;
+            self.handle_entries(&mut tx, files).await?;
         }
 
         tx.commit().await?;
