@@ -14,11 +14,11 @@ aws-smithy-types = "1.2.0"
 clap = { version = "4.5.4", features = ["derive"] }
 clap-verbosity = "2.1.0"
 futures-util = "0.3.30"
-gethostname = "0.4.3"
-itertools = "0.13.0"
+gethostname = "1"
+itertools = "0.14.0"
 mime_guess = "2.0.4"
 regex-lite = "0.1.5"
-sqlx = { version = "0.7.4", default-features = false, features = ["macros", "postgres", "runtime-tokio", "time", "tls-rustls"] }
+sqlx = { version = "0.8", default-features = false, features = ["macros", "postgres", "runtime-tokio", "time", "tls-rustls"] }
 tokio = { version = "1.37.0", features = ["fs", "rt", "macros", "rt-multi-thread", "signal"] }
 tokio-stream = "0.1.15"
 tracing = "0.1.40"
