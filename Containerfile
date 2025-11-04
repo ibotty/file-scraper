@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9-minimal
+FROM registry.access.redhat.com/ubi10-minimal
 ARG BINARY=target/release/file-scraper
 
 LABEL maintainer="Tobias Florek <tob@butter.sh>"
