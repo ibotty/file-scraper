@@ -85,7 +85,7 @@ jobs:
       run: |
           set -x
           # if a tag was pushed
-          if [[ "${{ github.ref }}" = refs/tags/v* ]]; then
+          if [[ "${{ github.ref }}" = refs/tags/* ]]; then
             version="$(grep '^version ' Cargo.toml | cut -f2 -d'"')"
             echo "tags=$version latest" >> $GITHUB_OUTPUT
           else
