@@ -1,12 +1,12 @@
 use std::{env, time::SystemTime};
 
 use anyhow::{Context, Result};
-use aws_sdk_s3::{operation::list_objects_v2::ListObjectsV2Output, types::Object, Client};
+use aws_sdk_s3::{Client, operation::list_objects_v2::ListObjectsV2Output, types::Object};
 use regex_lite::Regex;
 use tracing::{debug, instrument};
 
 use crate::{
-    db::{FileInfo, DB},
+    db::{DB, FileInfo},
     worker,
 };
 
@@ -50,14 +50,14 @@ impl Worker {
 
     #[instrument]
     fn parse_s3_url(s3_url: &str) -> Result<(String, String)> {
-        let re = Regex::new(r"^s3://(?<bucket>[[:alnum:]-_]+)(|(?<path>/.*))$")
+        let re = Regex::new(r"^s3://(?<bucket>[[:alnum:]-_]+)(|/(?<path>.*))$")
             .context("Cannot create regex")?;
         let captures = re.captures(s3_url).context("s3: Cannot parse s3 URL")?;
         let s3_bucket = captures.name("bucket").unwrap().as_str().to_string();
         let path = captures
             .name("path")
             .map(|c| c.as_str())
-            .unwrap_or("/")
+            .unwrap_or("")
             .to_string();
         Ok((s3_bucket, path))
     }
@@ -101,7 +101,7 @@ impl Worker {
 }
 
 fn fileinfo_from_object(f: &Object) -> FileInfo {
-    let (filename, path) = f
+    let (path,filename) = f
         .key()
         .expect("key is None")
         .rsplit_once('/')
