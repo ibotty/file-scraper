@@ -1,0 +1,115 @@
+name: Build Container Image
+
+env:
+  REGISTRY: quay.io/ibotty
+  IMAGE_NAME: file-scraper
+  SCCACHE_GHA_ENABLED: "true"
+
+on:
+  push:
+    # tags:
+    # - "*"
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: update rust to latest stable
+        run: |
+          rustup update
+      - uses: metalbear-co/sccache-action@v1.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build
+      - run: cargo test
+      - run: cargo clippy
+
+  build-release:
+    needs:
+    - build
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: update rust to latest stable
+        run: |
+          rustup update
+      - uses: metalbear-co/sccache-action@v1.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          cargo build --release
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: file-scraper
+          path: target/release/file-scraper
+
+  build-container:
+    needs:
+    - build-release
+    permissions:
+      contents: read
+      packages: write
+      # actions: write
+    
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Download release artifacts 
+      uses: actions/download-artifact@v5
+      with:
+        name: file-scraper
+        path: ./artifacts
+
+    - name: Extract artifacts
+      run: |
+        tar xJf artifacts/file-scraper-x86_64-unknown-linux-gnu.tar.xz
+        mv file-scraper-x86_64-unknown-linux-gnu/file-scraper .
+
+    - name: Log into registry
+      uses: redhat-actions/podman-login@v1
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+    - name: Determine tags to push
+      id: determine-tags
+      run: |
+          set -x
+          # if a tag was pushed
+          if [[ "${{ github.ref }}" = refs/tags/v* ]]; then
+            version="$(grep '^version ' Cargo.toml | cut -f2 -d'"')"
+            echo "tags=$version latest" >> $GITHUB_OUTPUT
+          else
+            echo "tags=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+    - name: Build container
+      id: build-image
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ env.IMAGE_NAME }}
+        tags: "${{ steps.determine-tags.outputs.tags }}"
+        build-args: BINARY=file-scraper
+        oci: true
+        containerfiles: ./Containerfile
+
+    - name: push to registry
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-image.outputs.image }}
+        tags: ${{ steps.build-image.outputs.tags }}
+        registry: ${{ env.REGISTRY }}

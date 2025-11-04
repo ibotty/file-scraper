@@ -155,9 +155,9 @@ impl worker::Worker for Worker {
 #[cfg(test)]
 mod test {
     const S3_URLS: [(&str, &str, &str); 3] = [
-        ("s3://test_bucket/test", "test_bucket", "/test"),
-        ("s3://test-bucket", "test-bucket", "/"),
-        ("s3://test-bucket_0253/", "test-bucket_0253", "/"),
+        ("s3://test_bucket/test", "test_bucket", "test"),
+        ("s3://test-bucket", "test-bucket", ""),
+        ("s3://test-bucket_0253/", "test-bucket_0253", ""),
     ];
 
     #[test]
