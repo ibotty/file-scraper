@@ -67,11 +67,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
     - name: Download release artifacts 
       uses: actions/download-artifact@v5
       with:
         name: file-scraper
         path: ./artifacts
+
+    - name: fixup permissions
+      run: |
+        chmod a+x artifacts/file-scraper
 
     - name: Log into registry
       uses: redhat-actions/podman-login@v1

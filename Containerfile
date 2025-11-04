@@ -5,5 +5,5 @@ LABEL maintainer="Tobias Florek <tob@butter.sh>"
 
 COPY $BINARY /file-scraper
 
-CMD ["/file-scraper"]
+ENTRYPOINT ["/file-scraper"]
 USER 1000
