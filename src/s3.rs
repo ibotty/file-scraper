@@ -101,7 +101,7 @@ impl Worker {
 }
 
 fn fileinfo_from_object(f: &Object) -> FileInfo {
-    let (path,filename) = f
+    let (path, filename) = f
         .key()
         .expect("key is None")
         .rsplit_once('/')
@@ -129,7 +129,6 @@ fn fileinfo_from_object(f: &Object) -> FileInfo {
 impl worker::Worker for Worker {
     async fn walk(&self) -> Result<()> {
         let mut tx = self.db.begin().await?;
-        DB::clean_table(&mut tx, &self.identifier).await?;
 
         let mut continuation_token = None;
         loop {

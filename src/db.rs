@@ -2,9 +2,9 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use sqlx::{
+    Postgres, Transaction,
     postgres::{PgPool as Pool, PgPoolOptions},
     types::time::OffsetDateTime,
-    Postgres, Transaction,
 };
 
 #[derive(Debug, sqlx::FromRow)]
@@ -65,7 +65,15 @@ impl DB {
                     $5::timestamptz[],
                     $6::timestamptz[],
                     $7::bigint[]
-                )"#,
+                )
+                ON CONFLICT ON CONSTRAINT external_file_unique_constraint
+                DO UPDATE
+                SET
+                    mime_type = EXCLUDED.mime_type,
+                    created = EXCLUDED.created,
+                    modified = EXCLUDED.modified,
+                    size = EXCLUDED.size
+                "#,
             external_source,
             &filenames,
             &pathes,
@@ -73,19 +81,6 @@ impl DB {
             &createds as &Vec<Option<OffsetDateTime>>,
             &modifieds,
             &sizes as &Vec<Option<i64>>,
-        )
-        .execute(&mut **tx)
-        .await?;
-        Ok(())
-    }
-
-    pub async fn clean_table(
-        tx: &mut Transaction<'static, Postgres>,
-        external_source: &str,
-    ) -> Result<()> {
-        sqlx::query!(
-            r#"DELETE FROM external_file WHERE external_source = $1"#,
-            external_source
         )
         .execute(&mut **tx)
         .await?;

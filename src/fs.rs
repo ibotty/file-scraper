@@ -11,7 +11,7 @@ use tokio_stream::StreamExt;
 use tracing::{debug, error, instrument};
 
 use crate::{
-    db::{FileInfo, DB},
+    db::{DB, FileInfo},
     worker,
 };
 
@@ -101,8 +101,6 @@ impl worker::Worker for Worker {
         pin!(batch_entries);
 
         let mut tx = self.db.begin().await?;
-
-        DB::clean_table(&mut tx, &self.identifier).await?;
 
         while let Some(batch) = batch_entries.next().await {
             let files: Vec<_> = batch.into_iter().try_collect()?;
