@@ -60,7 +60,7 @@ impl DB {
         // unchanged.  Because the mime type detection might have been wrong and we don't want to
         // overwrite a correct mime type.
         sqlx::query!(
-            r#"INSERT INTO external_file(external_source, filename, path, mime_type, created, modified, size)
+            r#"WITH found AS (
                 SELECT $1, * from UNNEST(
                     $2::text[],
                     $3::text[],
@@ -69,6 +69,9 @@ impl DB {
                     $6::timestamptz[],
                     $7::bigint[]
                 )
+            )
+            INSERT INTO external_file(external_source, filename, path, mime_type, created, modified, size)
+                SELECT * from found
                 ON CONFLICT ON CONSTRAINT external_file_unique_constraint
                 DO UPDATE
                 SET
