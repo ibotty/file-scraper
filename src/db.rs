@@ -56,6 +56,9 @@ impl DB {
             sizes.push(file.size.try_into().ok());
         });
 
+        // This query does not update `mime_type` when `created`, `modified` or `size` are
+        // unchanged.  Because the mime type detection might have been wrong and we don't want to
+        // overwrite a correct mime type.
         sqlx::query!(
             r#"INSERT INTO external_file(external_source, filename, path, mime_type, created, modified, size)
                 SELECT $1, * from UNNEST(
@@ -73,6 +76,9 @@ impl DB {
                     created = EXCLUDED.created,
                     modified = EXCLUDED.modified,
                     size = EXCLUDED.size
+                WHERE
+                    (external_file.created, external_file.modified, external_file.size)
+                    <> (EXCLUDED.created, EXCLUDED.modified, EXCLUDED.size)
                 "#,
             external_source,
             &filenames,
