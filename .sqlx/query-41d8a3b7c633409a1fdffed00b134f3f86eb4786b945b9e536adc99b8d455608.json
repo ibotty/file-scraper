@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE external_file SET deleted = NOW()\n                    WHERE external_source = $1 AND\n                      NOT EXISTS (\n                        SELECT * from existing_external_file temp_table\n                            WHERE external_file.uuid_external_file = temp_table.uuid_external_file)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41d8a3b7c633409a1fdffed00b134f3f86eb4786b945b9e536adc99b8d455608"
+}

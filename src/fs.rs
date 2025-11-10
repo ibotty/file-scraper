@@ -102,10 +102,14 @@ impl worker::Worker for Worker {
 
         let mut tx = self.db.begin().await?;
 
+        DB::create_temp_table(&mut tx).await?;
+
         while let Some(batch) = batch_entries.next().await {
             let files: Vec<_> = batch.into_iter().try_collect()?;
             self.handle_entries(&mut tx, files).await?;
         }
+
+        DB::mark_deleted_files(&mut tx, &self.identifier).await?;
 
         tx.commit().await?;
 

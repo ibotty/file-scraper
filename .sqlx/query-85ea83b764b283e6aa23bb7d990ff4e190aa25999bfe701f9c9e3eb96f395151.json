@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH found AS (\n                SELECT $1 as external_source, * from UNNEST(\n                    $2::text[],\n                    $3::text[],\n                    $4::text[],\n                    $5::timestamptz[],\n                    $6::timestamptz[],\n                    $7::bigint[]\n                ) AS t(filename, path, mime_type, created, modified, size)\n            ), existing AS (\n                SELECT uuid_external_file\n                FROM external_file\n                JOIN found USING (external_source, filename, path, size)\n            ), inserts AS (\n                INSERT INTO external_file(external_source, filename, path, mime_type, created, modified, size)\n                    SELECT * from found\n                    ON CONFLICT ON CONSTRAINT external_file_unique_constraint\n                    DO UPDATE\n                    SET\n                        mime_type = EXCLUDED.mime_type,\n                        created = EXCLUDED.created,\n                        modified = EXCLUDED.modified,\n                        size = EXCLUDED.size\n                    WHERE\n                        (external_file.created, external_file.modified, external_file.size)\n                        <> (EXCLUDED.created, EXCLUDED.modified, EXCLUDED.size)\n                    RETURNING uuid_external_file\n            )\n            INSERT INTO existing_external_file(uuid_external_file)\n                SELECT * FROM inserts\n                UNION\n                SELECT * FROM existing\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "TimestamptzArray",
+        "TimestamptzArray",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "85ea83b764b283e6aa23bb7d990ff4e190aa25999bfe701f9c9e3eb96f395151"
+}

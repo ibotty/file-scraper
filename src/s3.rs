@@ -130,6 +130,8 @@ impl worker::Worker for Worker {
     async fn walk(&self) -> Result<()> {
         let mut tx = self.db.begin().await?;
 
+        DB::create_temp_table(&mut tx).await?;
+
         let mut continuation_token = None;
         loop {
             let list_next = self.list_next(continuation_token).await?;
@@ -146,6 +148,8 @@ impl worker::Worker for Worker {
                 break;
             }
         }
+
+        DB::mark_deleted_files(&mut tx, &self.identifier).await?;
 
         tx.commit().await?;
         Ok(())

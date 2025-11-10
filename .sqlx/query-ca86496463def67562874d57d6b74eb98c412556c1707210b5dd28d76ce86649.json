@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "CREATE TEMPORARY TABLE existing_external_file(uuid_external_file UUID PRIMARY KEY)\n                    ON COMMIT DROP;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ca86496463def67562874d57d6b74eb98c412556c1707210b5dd28d76ce86649"
+}

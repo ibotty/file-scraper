@@ -35,6 +35,35 @@ impl DB {
         Ok(self.pool.begin().await?)
     }
 
+    pub async fn create_temp_table(tx: &mut Transaction<'static, Postgres>) -> Result<()> {
+        sqlx::query!(
+            r#"CREATE TEMPORARY TABLE existing_external_file(uuid_external_file UUID PRIMARY KEY)
+                    ON COMMIT DROP;"#
+        )
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn mark_deleted_files(
+        tx: &mut Transaction<'static, Postgres>,
+        external_source: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"
+                UPDATE external_file SET deleted = NOW()
+                    WHERE external_source = $1 AND
+                      NOT EXISTS (
+                        SELECT * from existing_external_file temp_table
+                            WHERE external_file.uuid_external_file = temp_table.uuid_external_file)
+                "#,
+            external_source
+        )
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
     pub async fn record_files(
         tx: &mut Transaction<'static, Postgres>,
         external_source: &str,
@@ -61,27 +90,37 @@ impl DB {
         // overwrite a correct mime type.
         sqlx::query!(
             r#"WITH found AS (
-                SELECT $1, * from UNNEST(
+                SELECT $1 as external_source, * from UNNEST(
                     $2::text[],
                     $3::text[],
                     $4::text[],
                     $5::timestamptz[],
                     $6::timestamptz[],
                     $7::bigint[]
-                )
+                ) AS t(filename, path, mime_type, created, modified, size)
+            ), existing AS (
+                SELECT uuid_external_file
+                FROM external_file
+                JOIN found USING (external_source, filename, path, size)
+            ), inserts AS (
+                INSERT INTO external_file(external_source, filename, path, mime_type, created, modified, size)
+                    SELECT * from found
+                    ON CONFLICT ON CONSTRAINT external_file_unique_constraint
+                    DO UPDATE
+                    SET
+                        mime_type = EXCLUDED.mime_type,
+                        created = EXCLUDED.created,
+                        modified = EXCLUDED.modified,
+                        size = EXCLUDED.size
+                    WHERE
+                        (external_file.created, external_file.modified, external_file.size)
+                        <> (EXCLUDED.created, EXCLUDED.modified, EXCLUDED.size)
+                    RETURNING uuid_external_file
             )
-            INSERT INTO external_file(external_source, filename, path, mime_type, created, modified, size)
-                SELECT * from found
-                ON CONFLICT ON CONSTRAINT external_file_unique_constraint
-                DO UPDATE
-                SET
-                    mime_type = EXCLUDED.mime_type,
-                    created = EXCLUDED.created,
-                    modified = EXCLUDED.modified,
-                    size = EXCLUDED.size
-                WHERE
-                    (external_file.created, external_file.modified, external_file.size)
-                    <> (EXCLUDED.created, EXCLUDED.modified, EXCLUDED.size)
+            INSERT INTO existing_external_file(uuid_external_file)
+                SELECT * FROM inserts
+                UNION
+                SELECT * FROM existing
                 "#,
             external_source,
             &filenames,
