@@ -8,7 +8,7 @@ use itertools::Itertools;
 use sqlx::{Postgres, Transaction};
 use tokio::pin;
 use tokio_stream::StreamExt;
-use tracing::{debug, error, instrument};
+use tracing::{debug, instrument};
 
 use crate::{
     db::{DB, FileInfo},
@@ -47,33 +47,32 @@ impl Worker {
     }
 
     #[instrument]
-    async fn get_fileinfo(entry: &DirEntry) -> Result<FileInfo> {
+    async fn get_fileinfo(entry: &DirEntry) -> Result<Option<FileInfo>> {
         let path = entry.path().parent().unwrap().to_string_lossy().to_string();
         let filename = entry.file_name().to_string_lossy().to_string();
-        let mime_type = match entry.file_type().await.map(|ft| ft.is_file()) {
-            Ok(true) => mime_guess::from_path(entry.path())
-                .first()
-                .map(|m| m.essence_str().to_string()),
-            Ok(false) => Some("inode/directory".to_string()),
-            Err(e) => {
-                error!(?e);
-                None
-            }
-        };
         let metadata = entry.metadata().await?;
+
+        let mime_type: Option<String> = if metadata.file_type().is_file() {
+            mime_guess::from_path(entry.path())
+                .first()
+                .map(|m| m.essence_str().to_string())
+        } else {
+            // do not record directories
+            return Ok(None);
+        };
 
         let size = metadata.len();
         let created = Some(metadata.created()?);
         let modified = metadata.modified()?;
 
-        Ok(FileInfo {
+        Ok(Some(FileInfo {
             path,
             filename,
             mime_type,
             created,
             modified,
             size,
-        })
+        }))
     }
 
     #[instrument(skip_all)]
@@ -86,6 +85,7 @@ impl Worker {
         let files = join_all(entries.iter().map(Self::get_fileinfo))
             .await
             .into_iter()
+            .filter_map_ok(|f| f)
             .collect::<Result<Vec<_>>>()?;
 
         DB::record_files(tx, &self.identifier, files).await
